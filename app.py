@@ -468,6 +468,12 @@ def initialize_clients(
                 temperature=local_temperature,
                 max_tokens=int(local_max_tokens),
             )
+        elif local_provider == "Lemonade":
+            st.session_state.local_client = LemonadeClient(
+            model_name=local_model_name,
+            temperature=local_temperature,
+            max_tokens=int(local_max_tokens)
+            )
 
         else:  # Ollama
             st.session_state.local_client = OllamaClient(
@@ -503,6 +509,14 @@ def initialize_clients(
                 hf_token=hf_token,
                 do_sample=(local_temperature > 0),
             )
+        elif local_provider == "Lemonade":
+            st.session_state.local_client = LemonadeClient(
+            model_name=local_model_name,
+            temperature=local_temperature,
+            max_tokens=int(local_max_tokens)
+            )
+
+        
         else:  # Ollama
             st.session_state.local_client = OllamaClient(
                 model_name=local_model_name,
@@ -780,9 +794,15 @@ def run_protocol(
                     and "local_max_tokens" in st.session_state
                     and "api_key" in st.session_state
                 ):
+                    if local_provider == "Lemonade":
+                        st.session_state.local_client = LemonadeClient(
+                        model_name=st.session_state.local_model_name,
+                        temperature=st.session_state.local_temperature,
+                        max_tokens=int(st.session_state.local_max_tokens)
+                        )
 
                     # Reinitialize the local client with the new num_ctx
-                    if local_provider == "Ollama":
+                    elif local_provider == "Ollama":
                         st.session_state.local_client = OllamaClient(
                             model_name=st.session_state.local_model_name,
                             temperature=st.session_state.local_temperature,
@@ -1273,7 +1293,7 @@ with st.sidebar:
 
     # Local model provider selection
     st.subheader("Local Model Provider")
-    local_provider_options = ["Ollama"]
+    local_provider_options = ["Ollama", "Lemonade"]
     if mlx_available:
         local_provider_options.append("MLX")
     if cartesia_available:
@@ -1506,6 +1526,13 @@ with st.sidebar:
                 "Llama 3 8B Instruct": "meta-llama/Llama-3.1-8B-Instruct",
                 "Helium-1-2b": "kyutai/helium-1-2b",
                 "Foundation-Sec-8B": "fdtn-ai/Foundation-Sec-8B",
+            }
+        elif local_provider == "Lemonade":
+            local_model_options = {
+                "CodeLlama_7b_Instruct_hf": "amd/CodeLlama-7b-instruct-awq-asym-uint4-g128-lmhead-onnx-hybrid",
+                "DeepSeek_R1_Distill_Llama_8B": "amd/DeepSeek-R1-Distill-Llama-8B-awq-asym-uint4-g128-lmhead-onnx-hybrid",
+                "DeepSeek_R1_Distill_Qwen_1_5B": "amd/DeepSeek-R1-Distill-Qwen-1.5B-awq-asym-uint4-g128-lmhead-onnx-hybrid",
+                "DeepSeek_R1_Distill_Qwen_7B": "amd/DeepSeek-R1-Distill-Qwen-7B-awq-asym-uint4-g128-lmhead-onnx-hybrid"
             }
         else:  # Ollama            # Get available Ollama models
             available_ollama_models = OllamaClient.get_available_models()

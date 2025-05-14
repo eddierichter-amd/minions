@@ -1,4 +1,5 @@
 from minions.clients.ollama import OllamaClient
+from minions.clients.lemonade import LemonadeClient
 from minions.clients.openai import OpenAIClient
 from minions.clients.azure_openai import AzureOpenAIClient
 from minions.clients.anthropic import AnthropicClient
@@ -14,6 +15,7 @@ from minions.clients.llama_api import LlamaApiClient
 
 __all__ = [
     "OllamaClient",
+    "LemonadeClient",
     "OpenAIClient",
     "AzureOpenAIClient",
     "AnthropicClient",
