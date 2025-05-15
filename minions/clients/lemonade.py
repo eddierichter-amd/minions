@@ -18,6 +18,8 @@ else:
     raise EnvironmentError("Set CONDA_ENV_PATH to your Conda environment directory")
 
 from lemonade.api import from_pretrained
+from lemonade.tools.ort_genai.oga import OrtGenaiStreamer
+
 
 class LemonadeClient:
     def __init__(
@@ -26,63 +28,112 @@ class LemonadeClient:
         recipe: str = "oga-hybrid",
         temperature: float = 0.0,
         max_tokens: int = 2048,
+        streaming: bool = False  # <-- Add streaming option
     ):
         self.model_name = model_name
         self.recipe = recipe
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.streaming = streaming  # <-- Store the streaming flag
         self.logger = logging.getLogger("LemonadeClient")
         self.logger.setLevel(logging.INFO)
-        
-        # Load model and tokenizer during initialization
-        self.model, self.tokenizer = from_pretrained(
-            self.model_name,
-            recipe=self.recipe
+        try:
+            self.model, self.tokenizer = from_pretrained(
+                self.model_name,
+                recipe=self.recipe
+            )
+        except Exception as e:
+            self.logger.error(f"Model loading failed: {e}")
+            raise
+
+    def _prepare_prompt(self, messages: List[Dict[str, Any]]) -> str:
+        return self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
         )
 
     def chat(
         self,
         messages: List[Dict[str, Any]],
+        streaming: Optional[bool] = None,  # Allow per-call override
         **kwargs,
     ) -> Tuple[List[str], Usage, List[str]]:
-        """Uses local model for generation with chat formatting"""
+        """
+        Unified chat interface.
+        If streaming is True, uses streaming; else blocking.
+        """
+        use_streaming = self.streaming if streaming is None else streaming
+        if use_streaming:
+            return self.schat(messages, **kwargs)
+        else:
+            return self.bchat(messages, **kwargs)
+
+    def bchat(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs,
+    ) -> Tuple[List[str], Usage, List[str]]:
+        """Blocking generation: returns the full response at once."""
         try:
             if not messages or not isinstance(messages, list):
                 raise ValueError("Invalid messages format")
-            
-            # Convert chat messages to model's prompt format
-            prompt = self.tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-            
-            # Tokenize input
+
+            prompt = self._prepare_prompt(messages)
             inputs = self.tokenizer(prompt, return_tensors="pt")
-            
-            # Generate response
             outputs = self.model.generate(
                 inputs.input_ids,
                 max_new_tokens=self.max_tokens,
                 temperature=self.temperature,
                 pad_token_id=self.tokenizer.eos_token_id
             )
-            
-            # Decode only the new tokens
             generated_tokens = outputs[0][inputs.input_ids.shape[-1]:]
             response_text = self.tokenizer.decode(
                 generated_tokens,
                 skip_special_tokens=True
             )
-            
-            # Calculate token usage
             usage = Usage(
                 prompt_tokens=inputs.input_ids.shape[-1],
                 completion_tokens=generated_tokens.shape[-1]
             )
-            
-            return ([response_text], usage, ["stop"])  # Single response
-
+            return ([response_text], usage, ["stop"])
         except Exception as e:
-            self.logger.error(f"Generation Error: {str(e)}")
+            self.logger.error(f"Lemonade blocking generation error: {e}")
+            return ([""], Usage(), ["error"])
+
+    def schat(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs,
+    ) -> Tuple[List[str], Usage, List[str]]:
+        """Streaming generation: yields tokens as they are generated."""
+        try:
+            if not messages or not isinstance(messages, list):
+                raise ValueError("Invalid messages format")
+
+            prompt = self._prepare_prompt(messages)
+            inputs = self.tokenizer(prompt, return_tensors="pt")
+            streamer = OrtGenaiStreamer(self.tokenizer)
+            generation_kwargs = {
+                "input_ids": inputs.input_ids,
+                "streamer": streamer,
+                "max_new_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "pad_token_id": self.tokenizer.eos_token_id
+            }
+            thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+            thread.start()
+
+            streamed_text = ""
+            for new_text in streamer:
+                streamed_text += new_text
+
+            thread.join()
+            usage = Usage(
+                prompt_tokens=inputs.input_ids.shape[-1],
+                completion_tokens=len(self.tokenizer(streamed_text, return_tensors="pt").input_ids[0])
+            )
+            return ([streamed_text], usage, ["stop"])
+        except Exception as e:
+            self.logger.error(f"Lemonade streaming generation error: {e}")
             return ([""], Usage(), ["error"])
