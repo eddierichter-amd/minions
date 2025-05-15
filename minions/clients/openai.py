@@ -140,11 +140,14 @@ class OpenAIClient:
                 self.logger.error(f"Error during OpenAI API call: {e}")
                 raise
 
-            # Extract usage information
-            usage = Usage(
-                prompt_tokens=response.usage.prompt_tokens,
-                completion_tokens=response.usage.completion_tokens,
-            )
+            # Extract usage information if it exists
+            if response.usage is None:
+                usage = Usage(prompt_tokens=0, completion_tokens=0)
+            else:
+                usage = Usage(
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                )
 
             # The content is now nested under message
             if self.return_finish_reason:
