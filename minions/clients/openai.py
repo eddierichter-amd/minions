@@ -91,13 +91,14 @@ class OpenAIClient:
 
         outputs = [output_text[1].content[0].text]
 
-        usage = response.usage.input_tokens
-
-        # Extract usage information
-        usage = Usage(
-            prompt_tokens=response.usage.input_tokens,
-            completion_tokens=response.usage.output_tokens,
-        )
+        # Extract usage information if it exists
+        if response.usage is None:
+            usage = Usage(prompt_tokens=0, completion_tokens=0)
+        else:
+            usage = Usage(
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+            )
 
         return outputs, usage
 
