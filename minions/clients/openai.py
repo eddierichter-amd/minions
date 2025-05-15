@@ -16,6 +16,7 @@ class OpenAIClient:
         max_tokens: int = 4096,
         base_url: Optional[str] = None,
         use_responses_api: bool = False,
+        return_finish_reason: bool = False,
         tools: List[Dict[str, Any]] = None,
         reasoning_effort: str = "low",
     ):
@@ -28,6 +29,7 @@ class OpenAIClient:
             temperature: Sampling temperature (default: 0.0)
             max_tokens: Maximum number of tokens to generate (default: 4096)
             base_url: Base URL for the OpenAI API (optional, falls back to OPENAI_BASE_URL environment variable or default URL)
+            return_finish_reason: Determine if we will return the finish reason from the response (default: False)
         """
         self.model_name = model_name
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -35,6 +37,7 @@ class OpenAIClient:
         self.logger.setLevel(logging.INFO)
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.return_finish_reason = return_finish_reason
         self.base_url = base_url or os.getenv(
             "OPENAI_BASE_URL", "https://api.openai.com/v1"
         )
@@ -144,4 +147,7 @@ class OpenAIClient:
             )
 
             # The content is now nested under message
-            return [choice.message.content for choice in response.choices], usage
+            if self.return_finish_reason:
+                return [choice.message.content for choice in response.choices], usage, [choice.finish_reason for choice in response.choices]
+            else:
+                return [choice.message.content for choice in response.choices], usage
