@@ -1529,11 +1529,15 @@ with st.sidebar:
             }
         elif local_provider == "Lemonade":
             local_model_options = {
-                "CodeLlama_7b_Instruct_hf": "amd/CodeLlama-7b-instruct-awq-asym-uint4-g128-lmhead-onnx-hybrid",
-                "DeepSeek_R1_Distill_Llama_8B": "amd/DeepSeek-R1-Distill-Llama-8B-awq-asym-uint4-g128-lmhead-onnx-hybrid",
-                "DeepSeek_R1_Distill_Qwen_1_5B": "amd/DeepSeek-R1-Distill-Qwen-1.5B-awq-asym-uint4-g128-lmhead-onnx-hybrid",
-                "DeepSeek_R1_Distill_Qwen_7B": "amd/DeepSeek-R1-Distill-Qwen-7B-awq-asym-uint4-g128-lmhead-onnx-hybrid"
+                "Qwen2.5-0.5B-Instruct-CPU": "Qwen2.5-0.5B-Instruct-CPU",
+                "Llama-3.2-1B-Instruct-Hybrid": "Llama-3.2-1B-Instruct-Hybrid",
+                "Llama-3.2-3B-Instruct-Hybrid": "Llama-3.2-3B-Instruct-Hybrid",
+                "Phi-3-Mini-Instruct-Hybrid": "Phi-3-Mini-Instruct-Hybrid",
+                "Qwen-1.5-7B-Chat-Hybrid": "Qwen-1.5-7B-Chat-Hybrid",
+                "DeepSeek-R1-Distill-Llama-8B-Hybrid": "DeepSeek-R1-Distill-Llama-8B-Hybrid",
+                "DeepSeek-R1-Distill-Qwen-7B-Hybrid": "DeepSeek-R1-Distill-Qwen-7B-Hybrid"
             }
+
         else:  # Ollama            # Get available Ollama models
             available_ollama_models = OllamaClient.get_available_models()
 
