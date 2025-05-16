@@ -1,5 +1,6 @@
 from minions.clients.ollama import OllamaClient
 from minions.clients.openai import OpenAIClient
+from minions.clients.lemonade import LemonadeClient
 from minions.minion import Minion
 
 local_client = LemonadeClient()
