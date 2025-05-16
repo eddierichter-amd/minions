@@ -95,7 +95,7 @@ class LemonadeClient:
 
     def _parse_response(self, data: dict) -> Tuple[List[str], Usage, List[str]]:
         choices = data.get("choices", [{}])
-        if data.usage is None:
+        if data.get("usage", None) is None:
             usage = Usage(prompt_tokens=0, completion_tokens=0)
         else:
             usage = Usage(
@@ -104,7 +104,7 @@ class LemonadeClient:
             )
         return (
             [choice.get("message", {}).get("content", "") for choice in choices],
-            usage.to_dict(),
+            usage,
             [choice.get("finish_reason", "stop") for choice in choices]
         )
 
