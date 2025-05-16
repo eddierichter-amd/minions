@@ -72,7 +72,8 @@ class LemonadeClient:
             self.logger.error(f"Blocking API Error: {str(e)}")
             return ([""], Usage(), ["error"])
 
-    def schat(self, messages: List[Dict[str, Any]], **kwargs) -> Tuple[List[str], Usage, List[str]]:
+    # use for streaming instead of blocking
+    """def schat(self, messages: List[Dict[str, Any]], **kwargs) -> Tuple[List[str], Usage, List[str]]:
         try:
             response = requests.post(
                 f"{self.base_url}/api/v0/chat/completions",
@@ -90,18 +91,24 @@ class LemonadeClient:
             return self._parse_stream(response)
         except Exception as e:
             self.logger.error(f"Streaming API Error: {str(e)}")
-            return ([""], Usage(), ["error"])
+            return ([""], Usage(), ["error"])"""
 
     def _parse_response(self, data: dict) -> Tuple[List[str], Usage, List[str]]:
         choices = data.get("choices", [{}])
-        usage_data = data.get("usage", {})
+        if data.usage is None:
+            usage = Usage(prompt_tokens=0, completion_tokens=0)
+        else:
+            usage = Usage(
+                prompt_tokens=data.usage.input_tokens,
+                completion_tokens=data.usage.output_tokens,
+            )
         return (
             [choice.get("message", {}).get("content", "") for choice in choices],
-            Usage(usage_data.get("prompt_tokens", 0), usage_data.get("completion_tokens", 0)),
+            usage.to_dict(),
             [choice.get("finish_reason", "stop") for choice in choices]
         )
 
-    def _parse_stream(self, response: requests.Response) -> Tuple[List[str], Usage, List[str]]:
+    """def _parse_stream(self, response: requests.Response) -> Tuple[List[str], Usage, List[str]]:
         full_response = ""
         finish_reasons = []
         for line in response.iter_lines():
@@ -115,4 +122,4 @@ class LemonadeClient:
             [full_response],
             Usage(0, len(full_response.split())),  # Estimate completion tokens
             finish_reasons or ["stop"]
-        )
+        )"""
