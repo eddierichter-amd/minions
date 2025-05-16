@@ -63,9 +63,13 @@ class LemonadeClient:
                     "temperature": self.temperature,
                     "max_tokens": self.max_tokens,
                     "stream": False
-                },
-                timeout=30
+                }
             )
+            # Handle 500 errors specifically
+            if response.status_code == 500:
+                self.logger.error(f"Server Error: {response.text}")
+                return (["Server configuration error"], Usage(), ["server_error"])
+            
             response.raise_for_status()
             return self._parse_response(response.json())
         except Exception as e:
