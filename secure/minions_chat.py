@@ -5,10 +5,9 @@ import logging
 import time
 import base64
 import os
-import fitz  # PyMuPDF
-from typing import List, Dict, Any, Optional, Generator, Callable, Union
-from urllib.parse import urlparse
 import mimetypes
+from typing import List, Dict, Any, Optional, Callable, Tuple
+from urllib.parse import urlparse
 
 from secure.utils.crypto_utils import (
     generate_key_pair,
@@ -18,6 +17,12 @@ from secure.utils.crypto_utils import (
     serialize_public_key,
     deserialize_public_key,
     verify_attestation_full,
+)
+
+from secure.utils.processing_utils import (
+    extract_text_from_pdf,
+    extract_text_from_txt,
+    process_folder,
 )
 
 # Define logger
@@ -78,6 +83,8 @@ class SecureMinionChat:
             raise RuntimeError("Supervisor attestation failed") from e
 
         attestation_time = time.time() - start_time
+
+        self.logger.info(f"🔒 SECURITY: Attestation report took: {attestation_time}")
         self.logger.info("✅ SECURITY: Attestation verification successful")
 
         # Generate ephemeral keypair for the session
@@ -89,6 +96,8 @@ class SecureMinionChat:
         self.local_priv, self.local_pub = generate_key_pair()
         self.shared_key = derive_shared_key(self.local_priv, self.supervisor_pub)
         key_exchange_time = time.time() - start_time
+
+        self.logger.info(f"🔒 SECURITY: Key exchange took: {key_exchange_time}")
 
         self.logger.info(
             "✅ SECURITY: Established shared secret key using Diffie-Hellman key exchange"
@@ -114,53 +123,57 @@ class SecureMinionChat:
 
     def _extract_text_from_pdf(self, pdf_path: str) -> Optional[str]:
         """Extract text content from a PDF file"""
-        try:
-            if not os.path.exists(pdf_path):
-                self.logger.error(f"PDF file not found: {pdf_path}")
-                return None
+        return extract_text_from_pdf(pdf_path, custom_logger=self.logger)
 
-            self.logger.info(f"📄 Extracting text from PDF: {pdf_path}")
+    def _extract_text_from_txt(self, txt_path: str) -> Optional[str]:
+        """Extract text content from a .txt file"""
+        return extract_text_from_txt(txt_path, custom_logger=self.logger)
 
-            pdf_content = ""
-            try:
-                # Open the PDF file
-                with fitz.open(pdf_path) as doc:
-                    # Iterate through each page
-                    for page_num in range(len(doc)):
-                        # Get the page
-                        page = doc[page_num]
-                        # Extract text from the page
-                        pdf_content += page.get_text()
-                        # Add a separator between pages
-                        if page_num < len(doc) - 1:
-                            pdf_content += "\n\n"
-            except Exception as e:
-                self.logger.error(f"Error extracting text from PDF: {str(e)}")
-                return None
+    def _process_folder(self, folder_path: str) -> Tuple[str, Optional[str]]:
+        """Process a folder containing text, PDF, and image files.
 
-            self.logger.info(
-                f"✅ PDF text extraction successful: {len(pdf_content)} characters"
-            )
-            return pdf_content
-
-        except Exception as e:
-            self.logger.error(f"❌ Error processing PDF: {str(e)}")
-            return None
+        Returns:
+            Tuple containing:
+            - Concatenated text content from all text and PDF files
+            - Path to a selected image (or None if no images found)
+        """
+        return process_folder(folder_path, custom_logger=self.logger)
 
     def send_message(
-        self, message: str, image_path: str = None, pdf_path: str = None
+        self,
+        message: str,
+        image_path: str = None,
+        pdf_path: str = None,
+        folder_path: str = None,
     ) -> Dict[str, Any]:
         """Send a message to the supervisor and get a response"""
         if not self.is_initialized:
             self.initialize_secure_session()
 
+        # Process folder if provided
+        folder_text_content = ""
+        if folder_path:
+            folder_text_content, selected_image = self._process_folder(folder_path)
+            # Override image_path with selected image from folder (if any)
+            if selected_image:
+                image_path = selected_image
+
         # Process PDF if provided
         pdf_content = None
         if pdf_path:
             pdf_content = self._extract_text_from_pdf(pdf_path)
-            if pdf_content:
-                # Format the message with PDF content as context
-                message = f"Context:\n\n{pdf_content}\n\nQuery:{message}"
+
+        # Build context from all text sources
+        context_parts = []
+        if folder_text_content:
+            context_parts.append(folder_text_content)
+        if pdf_content:
+            context_parts.append(pdf_content)
+
+        # Format the message with all content as context
+        if context_parts:
+            context_text = "\n\n".join(context_parts)
+            message = f"Context:\n\n{context_text}\n\nQuery:{message}"
 
         # Create the message object
         message_obj = {"role": "user", "content": message}
@@ -263,19 +276,37 @@ class SecureMinionChat:
         message: str,
         image_path: str = None,
         pdf_path: str = None,
+        folder_path: str = None,
         callback: Callable[[str], None] = None,
     ) -> Dict[str, Any]:
         """Send a message to the supervisor and get a streaming response"""
         if not self.is_initialized:
             self.initialize_secure_session()
 
+        # Process folder if provided
+        folder_text_content = ""
+        if folder_path:
+            folder_text_content, selected_image = self._process_folder(folder_path)
+            # Override image_path with selected image from folder (if any)
+            if selected_image:
+                image_path = selected_image
+
         # Process PDF if provided
         pdf_content = None
         if pdf_path:
             pdf_content = self._extract_text_from_pdf(pdf_path)
-            if pdf_content:
-                # Format the message with PDF content as context
-                message = f"Context:\n\n{pdf_content}\n\nQuery:{message}"
+
+        # Build context from all text sources
+        context_parts = []
+        if folder_text_content:
+            context_parts.append(folder_text_content)
+        if pdf_content:
+            context_parts.append(pdf_content)
+
+        # Format the message with all content as context
+        if context_parts:
+            context_text = "\n\n".join(context_parts)
+            message = f"Context:\n\n{context_text}\n\nQuery:{message}"
 
         # Create the message object
         message_obj = {"role": "user", "content": message}
@@ -481,14 +512,17 @@ if __name__ == "__main__":
                 print("Conversation cleared.")
                 continue
 
-            # Ask if user wants to include an image or PDF
+            # Ask if user wants to include an image, PDF, or folder
             attachment_type = None
             ask_for_attachment = (
-                input("Include an attachment? (image/pdf/none): ").lower().strip()
+                input("Include an attachment? (image/pdf/folder/none): ")
+                .lower()
+                .strip()
             )
 
             image_path = None
             pdf_path = None
+            folder_path = None
 
             if ask_for_attachment == "image":
                 image_path = input("Enter the path to the image file: ")
@@ -506,6 +540,24 @@ if __name__ == "__main__":
                 else:
                     print(f"Including PDF context: {pdf_path}")
 
+            elif ask_for_attachment == "folder":
+                folder_path = input("Enter the path to the folder: ")
+                if not os.path.exists(folder_path) or not os.path.isdir(folder_path):
+                    print(f"Folder not found or not a directory: {folder_path}")
+                    folder_path = None
+                else:
+                    print(f"Processing folder: {folder_path}")
+                    # Count files by type
+                    txt_count = len(glob.glob(os.path.join(folder_path, "*.txt")))
+                    pdf_count = len(glob.glob(os.path.join(folder_path, "*.pdf")))
+                    img_count = sum(
+                        len(glob.glob(os.path.join(folder_path, f"*.{ext}")))
+                        for ext in ["jpg", "jpeg", "png", "gif", "bmp"]
+                    )
+                    print(
+                        f"Found {txt_count} text files, {pdf_count} PDF files, and {img_count} images."
+                    )
+
             # Ask if user wants to stream
             use_streaming = True
 
@@ -519,6 +571,7 @@ if __name__ == "__main__":
                     user_input,
                     image_path=image_path,
                     pdf_path=pdf_path,
+                    folder_path=folder_path,
                     callback=print_chunk,
                 )
                 print("\n")  # Add a newline after streaming completes
@@ -528,7 +581,10 @@ if __name__ == "__main__":
             else:
                 print("Sending message securely...")
                 result = chat.send_message(
-                    user_input, image_path=image_path, pdf_path=pdf_path
+                    user_input,
+                    image_path=image_path,
+                    pdf_path=pdf_path,
+                    folder_path=folder_path,
                 )
                 print(f"\nAssistant: {result['response']}")
                 print(

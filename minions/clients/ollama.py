@@ -16,6 +16,7 @@ class OllamaClient:
         structured_output_schema: Optional[BaseModel] = None,
         use_async: bool = False,
         tool_calling: bool = False,
+        thinking: bool = False,
     ):
         """Initialize Ollama Client."""
         self.model_name = model_name
@@ -32,6 +33,7 @@ class OllamaClient:
 
         self.use_async = use_async
         self.return_tools = tool_calling
+        self.thinking = thinking
 
         # If we want structured schema output:
         self.format_structured_output = None
@@ -168,6 +170,10 @@ class OllamaClient:
         # Now we have a list of dictionaries. We'll call them in parallel.
         chat_kwargs = self._prepare_options()
 
+        if self.thinking:
+            kwargs["think"] = True
+
+       
         async def process_one(msg):
             resp = await self.client.chat(
                 model=self.model_name,
@@ -234,12 +240,20 @@ class OllamaClient:
 
             if "tool_calls" in response["message"]:
                 tools.append(response["message"]["tool_calls"])
-
-            usage_total += Usage(
-                prompt_tokens=response["prompt_eval_count"],
-                completion_tokens=response["eval_count"],
-            )
-            done_reasons.append(response["done_reason"])
+            try:
+                usage_total += Usage(
+                    prompt_tokens=response["prompt_eval_count"],
+                    completion_tokens=response["eval_count"],
+                )
+            except Exception as e:
+                usage_total = Usage(
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                )
+            try:
+                done_reasons.append(response["done_reason"])
+            except Exception as e:
+                done_reasons.append("stop")
 
         except Exception as e:
             self.logger.error(f"Error during Ollama API call: {e}")

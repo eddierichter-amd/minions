@@ -107,6 +107,9 @@ nonce = os.urandom(32)  # fresh each call
 report, report_json, gpu_eat = create_attestation_report(
     "remote-worker", public_key, nonce
 )
+logger.info(
+    f"🔐 SECURITY: Remote attestation -- I am GPU {json.loads(gpu_eat)['uuid']} running in Confidential Computing mode"
+)
 signature = sign_attestation(report_json, private_key)
 logger.info("✅ SECURITY: Attestation report created and signed")
 
@@ -235,7 +238,7 @@ def message_stream():
 
     # Parse the JSON string to get the worker_messages list
     worker_messages = json.loads(plaintext)
-    
+
     # Check if any messages contain image data
     for msg in worker_messages:
         if msg.get("role") == "user" and "image_url" in msg:
@@ -283,4 +286,3 @@ if __name__ == "__main__":
     logger.info(f"🚀 Starting secure worker server on {args.host}:{args.port}")
     # Set debug=False for production environments
     app.run(host=args.host, port=args.port, debug=False)
-

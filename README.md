@@ -15,17 +15,21 @@ Secure Minions Chat Blogpost: https://hazyresearch.stanford.edu/blog/2025-05-12-
 
 ## Table of Contents
 
+> **Looking for Secure Minions Chat?** If you're interested in our end-to-end encrypted and chat system, please see the [Secure Minions Chat README](secure/README.md) for detailed setup and usage instructions.
+
 - [Setup](#setup)
   - [Step 1: Clone and Install](#step-1-clone-the-repository-and-install-the-python-package)
   - [Step 2: Install a Local Model Server](#step-2-install-a-server-for-running-the-local-model)
   - [Step 3: Set Cloud LLM API Keys](#step-3-set-your-api-key-for-at-least-one-of-the-following-cloud-llm-providers)
 - [Minions Demo Application](#minions-demo-application)
+- [Minions WebGPU App](#minions-webgpu-app)
 - [Example Code](#example-code-minion-singular)
   - [Minion (Singular)](#example-code-minion-singular)
   - [Minions (Plural)](#example-code-minions-plural)
 - [Python Notebook](#python-notebook)
 - [Docker Support](#docker-support)
 - [Command Line Interface](#cli)
+- [Secure Minions Local-Remote Protocol](#secure-minions-local-remote-protocol)
 - [Secure Minions Chat](#secure-minions-chat)
 - [Inference Estimator](#inference-estimator)
   - [Command Line Usage](#command-line-usage)
@@ -197,6 +201,9 @@ export DEEPSEEK_API_KEY=<your-deepseek-api-key>
 
 # Anthropic
 export ANTHROPIC_API_KEY=<your-anthropic-api-key>
+
+# Mistral AI
+export MISTRAL_API_KEY=<your-mistral-api-key>
 ```
 
 ## Minions Demo Application
@@ -222,6 +229,37 @@ try running the following command:
 ```bash
 OLLAMA_FLASH_ATTENTION=1 ollama serve
 ```
+
+## Minions WebGPU App
+
+The Minions WebGPU app demonstrates the Minions protocol running entirely in the browser using WebGPU for local model inference and cloud APIs for supervision. This approach eliminates the need for local server setup while providing a user-friendly web interface.
+
+### Features
+
+- **Browser-based**: Runs entirely in your web browser with no local server required
+- **WebGPU acceleration**: Uses WebGPU for fast local model inference
+- **Model selection**: Choose from multiple pre-optimized models from [MLC AI](https://mlc.ai/models)
+- **Real-time progress**: See model loading progress and conversation logs in real-time
+- **Privacy-focused**: Your API key and data never leave your browser
+
+### Quick Start
+
+1. **Navigate to the WebGPU app directory:**
+   ```bash
+   cd apps/minions-webgpu
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Start the development server:**
+   ```bash
+   npm start
+   ```
+
+4. **Open your browser** and navigate to the URL shown in the terminal (typically `http://localhost:5173`)
 
 ## Example code: Minion (singular)
 
@@ -345,6 +383,63 @@ minions --help
 
 ```bash
 minions --context <path_to_context> --protocol <minion|minions>
+```
+
+## Secure Minions Local-Remote Protocol
+
+The Secure Minions Local-Remote Protocol (`secure/minions_secure.py`) provides an end-to-end encrypted implementation of the Minions protocol that enables secure communication between a local worker model and a remote supervisor server. This protocol includes attestation verification, perfect forward secrecy, and replay protection.
+
+
+### Prerequisites
+
+Install the secure dependencies:
+
+```bash
+pip install -e ".[secure]"
+```
+
+### Basic Usage
+
+#### Python API
+
+```python
+from minions.clients import OllamaClient
+from secure.minions_secure import SecureMinionProtocol
+
+# Initialize local client
+local_client = OllamaClient(model_name="llama3.2")
+
+# Create secure protocol instance
+protocol = SecureMinionProtocol(
+    supervisor_url="https://your-supervisor-server.com",
+    local_client=local_client,
+    max_rounds=3,
+    system_prompt="You are a helpful AI assistant."
+)
+
+# Run a secure task
+result = protocol(
+    task="Analyze this document for key insights",
+    context=["Your document content here"],
+    max_rounds=2
+)
+
+print(f"Final Answer: {result['final_answer']}")
+print(f"Session ID: {result['session_id']}")
+print(f"Log saved to: {result['log_file']}")
+
+# Clean up the session
+protocol.end_session()
+```
+
+#### Command Line Interfacec
+
+```bash
+python secure/minions_secure.py \
+    --supervisor_url https://your-supervisor-server.com \
+    --local_client_type ollama \
+    --local_model llama3.2 \
+    --max_rounds 3
 ```
 
 ## Secure Minions Chat
