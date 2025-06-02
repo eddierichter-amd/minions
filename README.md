@@ -75,8 +75,9 @@ _note_: for optional Cartesia-MLX install, pip install the basic package and the
 
 **Step 2:** Install a server for running the local model.
 
-We support two servers for running local models: `ollama` and `tokasaurus`. You need to install at least one of these.
+We support three servers for running local models: `lemonade`, `ollama`, and `tokasaurus`. You need to install at least one of these.
 
+- You should use `lemonade` if you have access to AMD GPUs/NPUs. Install `lemonade` following the instructions [here](https://lemonade-server.ai/).
 - You should use `ollama` if you do not have access to NVIDIA GPUs. Install `ollama` following the instructions [here](https://ollama.com/download). To enable Flash Attention, run
   `launchctl setenv OLLAMA_FLASH_ATTENTION 1` and, if on a mac, restart the ollama app.
 - You should use `tokasaurus` if you have access to NVIDIA GPUs and you are running the Minions protocol, which benefits from the high-throughput of `tokasaurus`. Install `tokasaurus` with the following command:
