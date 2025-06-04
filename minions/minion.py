@@ -126,7 +126,6 @@ class Minion:
             ConversationHistory(max_turns=max_history_turns) if is_multi_turn else None
         )
 
-        print(self.mcp_client)
 
     def __call__(
         self,
@@ -351,7 +350,6 @@ class Minion:
             supervisor_response, supervisor_usage = self.remote_client.chat(
                 messages=supervisor_messages, response_format={"type": "json_object"}
             )
-            print(supervisor_response)
         elif isinstance(self.remote_client, GeminiClient):
             from pydantic import BaseModel
 
@@ -401,8 +399,9 @@ class Minion:
         else:
             supervisor_json = _extract_json(supervisor_response[0])
 
+        print(f"💬 SUPERVISOR MESSAGE: {supervisor_json['message']}")
         worker_messages.append({"role": "user", "content": supervisor_json["message"]})
-
+        
         if self.mcp_client is not None:
             tool_calls = supervisor_json["mcp_tool_calls"]
         else:
@@ -484,8 +483,7 @@ class Minion:
             current_time = time.time()
             timing["local_call_time"] += current_time - local_start_time
 
-            print(f"Worker response: {worker_response}")
-            print(f"Worker usage: {worker_usage}")
+            print(f" 🔨 WORKER RESPONSE: {worker_response[0]}")
 
             local_usage += worker_usage
 
@@ -553,12 +551,7 @@ class Minion:
                 )
             else:
                 # First step: Think through the synthesis
-                if self.is_multi_turn:
-                    cot_prompt = REMOTE_SYNTHESIS_COT.format(
-                        response=worker_response[0]
-                    )
-                else:
-                    cot_prompt = REMOTE_SYNTHESIS_COT.format(
+                cot_prompt = REMOTE_SYNTHESIS_COT.format(
                         response=worker_response[0]
                     )
 
@@ -574,6 +567,7 @@ class Minion:
                 step_by_step_response, usage = self.remote_client.chat(
                     supervisor_messages
                 )
+                print(f"🔎 SUPERVISOR RESPONSE: {step_by_step_response[0]}")
                 current_time = time.time()
                 timing["remote_call_time"] += current_time - remote_start_time
 
