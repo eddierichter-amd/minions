@@ -1612,6 +1612,8 @@ with st.sidebar:
                 "Foundation-Sec-8B": "fdtn-ai/Foundation-Sec-8B",
             }
         elif local_provider == "Lemonade":
+            available_lemonade_models = LemonadeClient.get_available_models()
+
             local_model_options = {
                 "Llama-3.2-3B-Instruct-Hybrid": "Llama-3.2-3B-Instruct-Hybrid",
                 "Qwen2.5-0.5B-Instruct-CPU": "Qwen2.5-0.5B-Instruct-CPU",
@@ -1621,6 +1623,14 @@ with st.sidebar:
                 "DeepSeek-R1-Distill-Llama-8B-Hybrid": "DeepSeek-R1-Distill-Llama-8B-Hybrid",
                 "DeepSeek-R1-Distill-Qwen-7B-Hybrid": "DeepSeek-R1-Distill-Qwen-7B-Hybrid"
             }
+
+            # Add any additional available models from Lemonade that aren't in the default list
+            if available_lemonade_models:
+                for model in available_lemonade_models:
+                    model_key = model
+                    # Add the model if it's not already in the options
+                    if model not in local_model_options.values():
+                        local_model_options[model_key] = model
 
         else:  # Ollama            # Get available Ollama models
             available_ollama_models = OllamaClient.get_available_models()
