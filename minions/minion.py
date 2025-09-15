@@ -39,6 +39,38 @@ from minions.prompts.multi_turn import (
 from minions.usage import Usage
 from minions.utils.conversation_history import ConversationHistory, ConversationTurn
 
+def _extract_first_json_object(text: str) -> str:
+    """
+    Finds the first balanced JSON object { ... } in the text.
+    Returns the substring, or None if not found.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i+1]
+    return None
+
+
+def _extract_json_block(text: str) -> str:
+    """
+    Extracts the contents of a fenced `````` block,
+    even if nested code fences (e.g. ```
+    """
+    start = text.find("```json")
+    if start != -1:
+        # Find the last closing fence after the json start
+        end = text.rfind("```")
+        if end > start:
+            return text[start+7:end].strip()
+    return None
 
 def _escape_newlines_in_strings(json_str: str) -> str:
     # This regex naively matches any content inside double quotes (including escaped quotes)
@@ -53,24 +85,27 @@ def _escape_newlines_in_strings(json_str: str) -> str:
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
-    """Extract JSON from text that may be wrapped in markdown code blocks."""
-    block_matches = list(re.finditer(r"```(?:json)?\s*(.*?)```", text, re.DOTALL))
-    bracket_matches = list(re.finditer(r"\{.*?\}", text, re.DOTALL))
+    """
+    Extract JSON object from text:
+    1. Prefer fenced ```json ... ```
+    2. Otherwise, find the first balanced { ... } JSON object.
+    3. Escape newlines inside string values before parsing.
+    """
+    json_candidate = _extract_json_block(text)
+    if not json_candidate:
+        json_candidate = _extract_first_json_object(text)
 
-    if block_matches:
-        json_str = block_matches[-1].group(1).strip()
-    elif bracket_matches:
-        json_str = bracket_matches[-1].group(0)
-    else:
-        json_str = text
+    if not json_candidate:
+        raise ValueError("No JSON object found in text")
 
-    # Minimal fix: escape newlines only within quoted JSON strings.
-    json_str = _escape_newlines_in_strings(json_str)
+    fixed_json_candidate = _escape_newlines_in_strings(json_candidate)
 
     try:
-        return json.loads(json_str)
+        return json.loads(fixed_json_candidate)
     except json.JSONDecodeError:
-        print(f"Failed to parse JSON: {json_str}")
+        print(f"TEXT THAT CAUSED ERROR:\n{text}")
+        print(f"Inputted text to fix newlines:\n{json_candidate}")
+        print(f"Failed to parse JSON:\n{fixed_json_candidate}")
         raise
 
 

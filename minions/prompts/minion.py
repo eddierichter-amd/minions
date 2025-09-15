@@ -97,9 +97,12 @@ The Worker replied with:
 
 {response}
 
-This is your final round. You must provide a final answer in JSON. No further questions are allowed.
+This is your final round. You must provide a final answer in JSON. No further questions are allowed. If the objective of the task is to provide code then have the answer section of the json have the code snippet surrounded by triple ticks ```.
 
 Please respond in the following format:
+
+REMINDER: If the worker response is strictly code: then have the answer section of the json have the code snippet surrounded by triple ticks ```
+
 <briefly think about the information you have and the question you need to answer>
 ```json
 {{
@@ -143,7 +146,10 @@ Based on the detailed reasoning above, synthesize a clear and informative final 
 2. Clearly state the conclusive answer, incorporating the important details.
 3. Ensure the final answer is self-contained and actionable.
 
-If you determine that you have gathered enough information to fully answer the task, output the following JSON with your final answer:
+If you determine that you have gathered enough information to fully answer the task, output the following JSON with your final answer. If the objective of the task is to provide code then have the answer section of the json have the code snippet surrounded by triple ticks ```:
+
+
+REMINDER: If the worker response is strictly code: then have the answer section of the json have the code snippet surrounded by triple ticks ```
 
 ```json
 {{
@@ -195,10 +201,46 @@ Output your analysis in the following JSON format:
 
 IMPORTANT: Be conservative with remote routing - only route to remote ({remote_model_name}) if the task truly requires it."""
 
+CODING_TASK_ROUTER_PROMPT = """You are an expert at analyzing coding tasks and making routing decisions between language models. Your goal is to determine whether a given programming task requires a more powerful remote model or can be handled by a local model. Assume both models have equal access to the task context. The local model is {local_model_name} and the remote model is {remote_model_name}.
+
+When making your decision, focus on the specific needs of coding assistance:
+
+1. Complexity of the coding task (size of codebase, multi-file or multi-language interactions, algorithmic difficulty).
+2. Reasoning depth required for debugging or architecture design.
+3. Familiarity with domain-specific libraries, frameworks, or APIs.
+4. Risk of producing incorrect code or subtle logical errors.
+5. Requirement for correctness in multi-step reasoning (e.g., algorithm analysis, big-O tradeoffs, state management).
+6. Need for up-to-date ecosystem knowledge (latest language features, evolving libraries, or tooling changes).
+7. Potential for extended computation (e.g., generating and reasoning over long code snippets, refactoring across files).
+
+Current task: {task}
+Current conversation round: {round_num} out of {max_rounds}
+Previous context length: {context_length} characters
+Description of the context: {doc_metadata}
+
+Rate each factor on a scale of 1–5 and provide your final routing decision.
+
+Output your analysis in the following JSON format:
+{{
+    "complexity_analysis": {{
+        "code_complexity": <1-5>,
+        "reasoning_depth": <1-5>,
+        "library_framework_knowledge": <1-5>,
+        "error_risk": <1-5>,
+        "knowledge_recency": <1-5>,
+        "computation_steps": <1-5>
+    }},
+    "average_complexity": <float>,
+    "routing_decision": <"remote" or "local">,
+    "explanation": <string explaining the decision>
+}}
+
+IMPORTANT: Be conservative with remote routing—only assign to remote ({remote_model_name}) if the coding task truly requires advanced reasoning, domain knowledge, or ecosystem recency that the local model cannot reliably handle."""
 
 COST_CONSCIOUSNESS_LEVELS = {
     "uber": "Run everything locally for maximum cost savings",
     "high": "Follow standard minion protocol",
     "medium": "Make per-turn decisions between local and remote models",
-    "low": "Run everything remotely for maximum quality"
+    "low": "Run everything remotely for maximum quality",
+    "coding": "Make per-turn decisions between local and remote models for coding tasks"
 }

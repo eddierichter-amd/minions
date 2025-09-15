@@ -13,11 +13,25 @@ from minions.usage import Usage
 from minions.minions_mcp import SyncMCPClient
 from minions.prompts.minion import *
 
+from minions.prompts.minion_coding import (
+    CODING_WORKER_SYSTEM_PROMPT,
+    CODING_TASK_ROUTER_PROMPT,
+    CODING_SUPERVISOR_INITIAL_PROMPT,
+    CODING_SUPERVISOR_CONVERSATION_PROMPT,
+    CODING_SUPERVISOR_FINAL_PROMPT,
+    CODING_REMOTE_SYNTHESIS_COT,
+    CODING_REMOTE_SYNTHESIS_FINAL
+)
+
+from minions.minion_pygame import PygameMinion
+
 SENSITIVITY_LEVELS = {
     "uber": "Maximum cost savings: Run everything locally, prioritizing efficiency over quality",
     "high": "High cost sensitivity: Use standard protocol but bias towards efficiency",
     "medium": "Balanced: Make per-turn decisions weighing cost vs quality",
-    "low": "Low cost sensitivity: Prioritize quality, run everything remotely"
+    "low": "Low cost sensitivity: Prioritize quality, run everything remotely",
+    "coding": "Balanced: Make per-turn decisions weighing cost vs quality specifically for coding",
+    "pygame": "Pygame-optimized: Remote decomposition + local implementation + template integration"
 }
 
 class CostAwareMinion(Minion):
@@ -65,6 +79,19 @@ class CostAwareMinion(Minion):
         self.doc_metadata = None
         self.local_model_name = local_client.model_name
         self.remote_model_name = remote_client.model_name
+        
+        # Initialize pygame minion if needed
+        if cost_sensitivity == "pygame":
+            self.pygame_minion = PygameMinion(
+                local_client=local_client,
+                remote_client=remote_client,
+                max_rounds=max_rounds,
+                callback=callback,
+                log_dir=log_dir,
+                mcp_client=mcp_client,
+                is_multi_turn=is_multi_turn,
+                max_history_turns=max_history_turns
+            )
 
     def _decide_model_for_turn(self, task: str, previous_response: str = None) -> str:
         """Decide whether to use local or remote model for the current turn based on cost sensitivity."""
@@ -74,20 +101,30 @@ class CostAwareMinion(Minion):
             return "standard"  # Follow standard minion protocol
         elif self.cost_sensitivity == "low":
             return "remote"
-        elif self.cost_sensitivity == "medium":
+        elif self.cost_sensitivity in ["medium", "coding"]:
             # Make decision based on task complexity analysis and cost-quality tradeoff
             context_length = len(previous_response) if previous_response else 0
             
-            router_prompt = TASK_ROUTER_PROMPT.format(
-                task=task,
-                round_num=self.current_round + 1,  # 1-based for display
-                max_rounds=self.max_rounds,
-                context_length=context_length,
-                doc_metadata=self.doc_metadata,
-                local_model_name=self.local_model_name,
-                remote_model_name=self.remote_model_name
-            )
-
+            if self.cost_sensitivity == "medium":
+                router_prompt = TASK_ROUTER_PROMPT.format(
+                    task=task,
+                    round_num=self.current_round + 1,  # 1-based for display
+                    max_rounds=self.max_rounds,
+                    context_length=context_length,
+                    doc_metadata=self.doc_metadata,
+                    local_model_name=self.local_model_name,
+                    remote_model_name=self.remote_model_name
+                )
+            elif self.cost_sensitivity == "coding":
+                router_prompt = CODING_TASK_ROUTER_PROMPT.format(
+                    task=task,
+                    round_num=self.current_round + 1,  # 1-based for display
+                    max_rounds=self.max_rounds,
+                    context_length=context_length,
+                    doc_metadata=self.doc_metadata,
+                    local_model_name=self.local_model_name,
+                    remote_model_name=self.remote_model_name
+                )
 
             messages = [{"role": "user", "content": router_prompt}]
             decision_response, _ = self.remote_client.chat(messages, response_format={"type": "json_object"})
@@ -130,6 +167,19 @@ class CostAwareMinion(Minion):
         elif self.cost_sensitivity == "low":
             return self._run_remote_only(task, context, max_rounds, images)
             
+        # For pygame tasks, use specialized pygame approach
+        elif self.cost_sensitivity == "pygame":
+            return self.pygame_minion(
+                task=task,
+                context=context,
+                max_rounds=max_rounds,
+                doc_metadata=doc_metadata,
+                logging_id=logging_id,
+                is_privacy=is_privacy,
+                images=images,
+                is_follow_up=is_follow_up
+            )
+            
         # For high cost sensitivity, use standard protocol with efficiency bias
         elif self.cost_sensitivity == "high":
             return super().__call__(
@@ -143,8 +193,19 @@ class CostAwareMinion(Minion):
                 is_follow_up=is_follow_up
             )
             
-        # For medium sensitivity, balance cost and quality
-        else:  # medium
+        # For medium or coding sensitivity, balance cost and quality
+        elif self.cost_sensitivity == "medium":
+            return self._run_adaptive(
+                task=task,
+                context=context,
+                max_rounds=max_rounds,
+                doc_metadata=doc_metadata,
+                logging_id=logging_id,
+                is_privacy=is_privacy,
+                images=images,
+                is_follow_up=is_follow_up
+            )
+        else:  # coding
             return self._run_adaptive(
                 task=task,
                 context=context,
@@ -298,7 +359,8 @@ class CostAwareMinion(Minion):
             "context": context,
             "conversation": [],
             "generated_final_answer": "",
-            "usage": {"remote": {}, "local": {}}
+            "usage": {"remote": {}, "local": {}},
+            "detailed_logs": []  # New field for detailed logs
         }
 
         # Join context sections
@@ -310,16 +372,28 @@ class CostAwareMinion(Minion):
         worker_messages = []
 
         # Initial supervisor prompt
-        supervisor_messages = [
-            {
-                "role": "user",
-                "content": self.supervisor_initial_prompt.format(
-                    task=task,
-                    max_rounds=max_rounds,
-                    mcp_tools_info=None
-                ),
-            }
-        ]
+        if self.cost_sensitivity == "medium":
+            supervisor_messages = [
+                {
+                    "role": "user",
+                    "content": self.supervisor_initial_prompt.format(
+                        task=task,
+                        max_rounds=max_rounds,
+                        mcp_tools_info=None
+                    ),
+                }
+            ] 
+        elif self.cost_sensitivity == "coding":
+            supervisor_messages = [
+                {
+                    "role": "user",
+                    "content": CODING_SUPERVISOR_INITIAL_PROMPT.format(
+                        task=task,
+                        max_rounds=max_rounds,
+                        mcp_tools_info=None
+                    ),
+                }
+            ]
 
         # Add initial supervisor prompt to conversation log
         conversation_log["conversation"].append(
@@ -341,6 +415,14 @@ class CostAwareMinion(Minion):
         )
         timing["remote_call_time"] += time.time() - remote_start_time
         remote_usage += supervisor_usage
+
+        # Log the remote interaction
+        conversation_log["detailed_logs"].append({
+            "model": "remote",
+            "input": supervisor_messages,
+            "output": supervisor_response,
+            "token_count": supervisor_usage.to_dict()  # Assuming `Usage` has a `to_dict` method
+        })
 
         supervisor_messages.append(
             {"role": "assistant", "content": supervisor_response[0]}
@@ -374,20 +456,33 @@ class CostAwareMinion(Minion):
             if self.callback:
                 self.callback("worker", None, is_final=False)
 
-            # Decide which model to use for this turn
-            model_decision = self._decide_model_for_turn(sub_task, local_output)
+            if self.cost_sensitivity == "medium":
+                # Decide which model to use for this turn
+                model_decision = self._decide_model_for_turn(sub_task, local_output)
+            else: # hard code coding to switch off local and remote for now
+                model_decision = "local"
             print(f"🔄 Using {model_decision} model for round {round + 1}")
 
             if model_decision == "local":
                 # Initialize worker system prompt if not done
-                if len(worker_messages) == 1:  # Only has the user message
-                    worker_messages.insert(0, {
-                        "role": "system",
-                        "content": WORKER_SYSTEM_PROMPT.format(
-                            context=context, task=task
-                        ),
-                        "images": images
-                    })
+                if self.cost_sensitivity == "medium":
+                    if len(worker_messages) == 1:  # Only has the user message
+                        worker_messages.insert(0, {
+                            "role": "system",
+                            "content": WORKER_SYSTEM_PROMPT.format(
+                                context=context, task=task
+                            ),
+                            "images": images
+                        })
+                elif self.cost_sensitivity == "coding":
+                    if len(worker_messages) == 1:  # Only has the user message
+                        worker_messages.insert(0, {
+                            "role": "system",
+                            "content": CODING_WORKER_SYSTEM_PROMPT.format(
+                                context=context, task=task
+                            ),
+                            "images": images
+                        })
 
                 local_start_time = time.time()
                 worker_response, worker_usage, _ = self.local_client.chat(
@@ -397,22 +492,48 @@ class CostAwareMinion(Minion):
                 local_usage += worker_usage
                 local_output = worker_response[0]
 
+                # Append detailed log for local call
+                conversation_log["detailed_logs"].append({
+                    "model": "local",
+                    "input": worker_messages,
+                    "output": worker_response,
+                    "token_count": worker_usage.to_dict()
+                })
+
             else:  # remote
                 remote_start_time = time.time()
-                if len(worker_messages) == 1:
-                    worker_messages.insert(0, {
-                        "role": "system",
-                        "content": WORKER_SYSTEM_PROMPT.format(
-                            context=context, task=task
-                        ),
-                        "images": images
-                    })
+                if self.cost_sensitivity == "medium":
+                    if len(worker_messages) == 1:
+                        worker_messages.insert(0, {
+                            "role": "system",
+                            "content": WORKER_SYSTEM_PROMPT.format(
+                                context=context, task=task
+                            ),
+                            "images": images
+                        })
+                elif self.cost_sensitivity == "coding":
+                    if len(worker_messages) == 1:  # Only has the user message
+                        worker_messages.insert(0, {
+                            "role": "system",
+                            "content": CODING_WORKER_SYSTEM_PROMPT.format(
+                                context=context, task=task
+                            ),
+                            "images": images
+                        })
                 worker_response, worker_usage = self.remote_client.chat(
                     messages=worker_messages
                 )
                 timing["remote_call_time"] += time.time() - remote_start_time
                 remote_usage += worker_usage
                 local_output = worker_response[0]
+
+                # Append detailed log for remote call
+                conversation_log["detailed_logs"].append({
+                    "model": "remote",
+                    "input": worker_messages,
+                    "output": worker_response,
+                    "token_count": worker_usage.to_dict()
+                })
 
             print(f"🔄 Worker response: {local_output}")
 
@@ -426,9 +547,14 @@ class CostAwareMinion(Minion):
 
             # Format prompt based on whether this is the final round
             if round == max_rounds - 1:
-                supervisor_prompt = SUPERVISOR_FINAL_PROMPT.format(
-                    response=local_output
-                )
+                if self.cost_sensitivity == "medium":
+                    supervisor_prompt = SUPERVISOR_FINAL_PROMPT.format(
+                        response=local_output
+                    )
+                elif self.cost_sensitivity == "coding":
+                    supervisor_prompt = CODING_SUPERVISOR_FINAL_PROMPT.format(
+                        response=local_output
+                    )
 
                 # Add supervisor final prompt to conversation log
                 conversation_log["conversation"].append(
@@ -436,9 +562,14 @@ class CostAwareMinion(Minion):
                 )
             else:
                 # First step: Think through the synthesis
-                cot_prompt = REMOTE_SYNTHESIS_COT.format(
-                    response=local_output
-                )
+                if self.cost_sensitivity == "medium":
+                    cot_prompt = REMOTE_SYNTHESIS_COT.format(
+                        response=local_output
+                    )
+                elif self.cost_sensitivity == "coding":
+                    cot_prompt = CODING_REMOTE_SYNTHESIS_COT.format(
+                        response=local_output
+                    )
 
                 # Add supervisor COT prompt to conversation log
                 conversation_log["conversation"].append(
@@ -460,10 +591,23 @@ class CostAwareMinion(Minion):
                 )
                 conversation_log["conversation"][-1]["output"] = step_by_step_response[0]
 
+                # Log the remote interaction
+                conversation_log["detailed_logs"].append({
+                    "model": "remote",
+                    "input": supervisor_messages,
+                    "output": step_by_step_response,
+                    "token_count": usage.to_dict()  # Assuming `Usage` has a `to_dict` method
+                })
+
                 # Second step: Get structured output
-                supervisor_prompt = self.remote_synthesis_final.format(
-                    response=step_by_step_response[0]
-                )
+                if self.cost_sensitivity == "medium":
+                    supervisor_prompt = self.remote_synthesis_final.format(
+                        response=step_by_step_response[0]
+                    )
+                elif self.cost_sensitivity == "coding":
+                    supervisor_prompt = CODING_REMOTE_SYNTHESIS_FINAL.format(
+                        response=step_by_step_response[0], past_instructions=sub_task
+                    )
 
                 # Add supervisor synthesis prompt to conversation log
                 conversation_log["conversation"].append(
@@ -487,6 +631,14 @@ class CostAwareMinion(Minion):
                 {"role": "assistant", "content": supervisor_response[0]}
             )
             conversation_log["conversation"][-1]["output"] = supervisor_response[0]
+
+            # Log the remote interaction
+            conversation_log["detailed_logs"].append({
+                "model": "remote",
+                "input": supervisor_messages,
+                "output": step_by_step_response,
+                "token_count": supervisor_usage.to_dict()  # Assuming `Usage` has a `to_dict` method
+            })
 
             if self.callback:
                 self.callback("supervisor", supervisor_messages[-1], is_final=False)

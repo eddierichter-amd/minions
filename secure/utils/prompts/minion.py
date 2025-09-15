@@ -81,7 +81,7 @@ The Worker replied with:
 
 {response}
 
-This is your final round. You must provide a final answer in JSON. No further questions are allowed.
+This is your final round. You must provide a final answer in JSON. No further questions are allowed. If writing code is the objective of the 
 
 Please respond in the following format:
 <briefly think about the information you have and the question you need to answer>
