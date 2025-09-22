@@ -22,7 +22,7 @@ Break this into 4-6 sections with specific requirements for each. For each secti
 - Technical requirements (screen size, colors, physics, etc.)
 - Any special behaviors or interactions
 
-Respond with JSON:
+Respond with JSON - adapt the sections based on the specific game type:
 {{
     "game_title": "Descriptive Game Name",
     "game_description": "2-3 sentence overview of gameplay",
@@ -36,32 +36,26 @@ Respond with JSON:
         {{
             "name": "Game Constants and Setup",
             "requirements": "Define screen dimensions, colors, speeds, sizes. Include all numeric constants the game needs.",
-            "specifics": ["SCREEN_WIDTH = 800", "SCREEN_HEIGHT = 600", "List specific colors needed", "Movement speeds", "Object sizes"],
+            "specifics": ["Screen dimensions", "Colors needed", "Any speeds or sizes", "Game-specific constants"],
             "edge_cases": ["Ensure constants work for all screen sizes"]
         }},
         {{
-            "name": "Player/Main Character Class", 
-            "requirements": "Implement the main controllable character with movement, rendering, and collision detection",
-            "specifics": ["Movement controls (arrow keys/WASD)", "Position tracking", "Boundary checking", "Visual representation"],
-            "edge_cases": ["Screen boundary collisions", "Invalid movement inputs", "Simultaneous key presses"]
-        }},
-        {{
-            "name": "Game Objects Classes",
-            "requirements": "Other game entities (enemies, projectiles, collectibles, obstacles)",
-            "specifics": ["Individual class for each object type", "Update and draw methods", "Collision rectangles"],
-            "edge_cases": ["Objects going off-screen", "Collision detection accuracy", "Spawning/despawning"]
+            "name": "Game Classes", 
+            "requirements": "Implement all game entities (player, objects, items, etc.) with appropriate methods",
+            "specifics": ["Classes needed for this specific game", "Movement/behavior methods", "Rendering methods", "Any interaction methods"],
+            "edge_cases": ["Boundary handling", "State management", "Object interactions"]
         }},
         {{
             "name": "Game Logic Functions",
-            "requirements": "Core game mechanics, scoring, collision handling, game state management",
-            "specifics": ["Collision detection between objects", "Scoring system", "Game over conditions", "Level progression if applicable"],
-            "edge_cases": ["Multiple simultaneous collisions", "Score overflow", "Game state transitions"]
+            "requirements": "Core game mechanics, rules, state management, and any game-specific logic",
+            "specifics": ["Game rules implementation", "Win/lose conditions", "State transitions", "Any scoring or progression"],
+            "edge_cases": ["Edge cases specific to this game type", "State transitions", "Input validation"]
         }},
         {{
             "name": "Main Game Loop",
             "requirements": "Event handling, game state updates, rendering, and frame rate control",
-            "specifics": ["Event processing", "Game object updates", "Screen clearing and drawing", "Frame rate limiting"],
-            "edge_cases": ["Window close handling", "Key repeat events", "Performance on slow systems"]
+            "specifics": ["Event processing", "Game object updates", "Screen rendering", "Frame rate control"],
+            "edge_cases": ["Window close handling", "Input handling", "Performance considerations"]
         }}
     ]
 }}
@@ -101,17 +95,13 @@ IF section_name == "Game Constants and Setup":
 - Example: SCREEN_WIDTH = 800, BLACK = (0, 0, 0)
 - NO classes, NO functions, NO pygame.init()
 
-IF section_name == "Player/Main Character Class":  
-- Write ONLY the Player class
-- Include __init__, update, draw, and collision methods
+IF section_name == "Game Classes":  
+- Write ALL game entity classes needed for this specific game
+- Include __init__, update, draw methods for each class
+- ADD get_rect() method for each class (returns pygame.Rect for collision detection)
 - USE existing constants for dimensions, colors, speeds
-- NO other classes, NO constants redefinition
-
-IF section_name == "Game Objects Classes":
-- Write ONLY Enemy and Bullet classes (or similar game objects)
-- Each class needs __init__, update, draw methods
-- USE existing constants and REFERENCE Player class for interactions
-- NO main loop, NO Player class redefinition
+- Make classes self-contained with proper encapsulation
+- NO main loop, NO constants redefinition
 
 IF section_name == "Game Logic Functions":
 - Write ONLY helper functions for collision detection, scoring
@@ -121,7 +111,7 @@ IF section_name == "Game Logic Functions":
 
 IF section_name == "Main Game Loop":
 - Write ONLY the main() function and game loop
-- Include pygame.init(), event handling, game loop
+- MUST include: pygame.init(), event handling, game loop, if __name__ == "__main__": main()
 - INSTANTIATE all available classes and CALL all available functions
 - This is the ONLY section that should have a complete loop
 
@@ -132,6 +122,7 @@ CRITICAL: After your code, provide a detailed COMPONENT DOCUMENTATION section ex
 - When other sections should use them  
 - What parameters they expect and what they return
 - Usage patterns and calling sequences
+- Any important implementation details for integration (e.g., "call update() before draw()", "use get_rect() for collisions")
 
 Format:
 ```python
@@ -169,27 +160,30 @@ CRITICAL: You MUST start your response with ```python and end with ```
 
 INTEGRATION REQUIREMENTS:
 1. **MANDATORY**: Start your response with ```python and end with ```
-2. Ensure proper import statements at the top
-3. Initialize pygame correctly
-4. Create a proper main() function and game loop
-5. Handle all event processing (quit, key presses)
-6. Implement proper game state management
-7. Add any missing connections between sections
-8. Ensure the game runs without errors
-9. Include if __name__ == "__main__": main() at the end
-10. Make sure that no buttons are reused for different aspects of the game (ex: restart and a game action should be different keys)
+2. **MANDATORY**: Include ALL necessary imports at the top (pygame, sys, random, time, etc.)
+3. Initialize pygame correctly with pygame.init()
+4. Create a proper main() function that contains the entire game loop
+5. Handle ALL event processing (quit, key presses, mouse clicks as needed)
+6. Add any missing connections between sections
+7. Ensure the game runs without errors
+8. Include if __name__ == "__main__": main() at the end
 
-CRITICAL COMPONENT USAGE CHECKS:
-- All classes from the inventory are properly instantiated in main() according to their documented purpose
-- All functions from the inventory are called where appropriate based on their documentation
+INTEGRATION BEST PRACTICES:
+- Use pygame.Rect objects for all collision detection (more accurate than manual distance checks)
+- Update objects before checking collisions
+- Use list comprehensions or reversed() when removing items from lists during iteration
+- Initialize pygame font system if displaying text: pygame.font.init()
+- Set up proper game states (playing, paused, game_over) if applicable
+- Use pygame.time.Clock() for consistent frame rates
+- Handle pygame.QUIT events properly to allow clean exit
+
+COMPONENT USAGE:
+- All classes from the inventory are properly instantiated in main()
+- All functions from the inventory are called with correct parameters  
 - All constants from the inventory are used consistently (no redefinition)
 - Game objects are updated and drawn in the correct order
-- Collision detection works between all relevant objects
-- Game over conditions are properly handled
 - Screen boundaries are respected using defined constants
 - FPS is properly controlled using defined constants
-
-NOTE: The component inventory includes documentation written by the model that created each component, explaining exactly what each does and when to use it.
 
 REMEMBER: Your response must begin with ```python and end with ``` to properly format the code.
 
@@ -386,12 +380,15 @@ Technical Specs: {tech_specs}
         # Get complete component inventory for integration
         component_inventory = self._format_available_components()
         
+        # Add game loop structure guidance
+        game_loop_guidance = self._generate_game_loop_guidance()
+        
         try:
             integration_prompt = INTEGRATION_PROMPT.format(
                 task=task, 
                 context=context,
                 game_specs=game_specs,
-                component_inventory=component_inventory,
+                component_inventory=component_inventory + "\n\n" + game_loop_guidance,
                 all_sections=all_sections
             )
             
@@ -512,12 +509,16 @@ Technical Specs: {tech_specs}
             # Use model's documentation or fallback to inference
             purpose = documented_components.get(name, self._infer_function_purpose(name, section_name))
             
+            # Extract usage hints from documentation
+            usage_hints = self._extract_usage_hints(documented_components.get(name, ""))
+            
             self.created_functions.append({
                 'name': name,
                 'params': clean_params,
                 'return_type': return_type.strip() if return_type else 'None',
                 'purpose': purpose,
-                'section': section_name
+                'section': section_name,
+                'usage_hints': usage_hints
             })
         
         # Extract class definitions
@@ -527,14 +528,20 @@ Technical Specs: {tech_specs}
             methods = re.findall(r'def\s+(\w+)\s*\([^)]*\):', class_body)
             key_methods = [m for m in methods if not m.startswith('_') or m in ['__init__']]
             
+            # Check if class has collision-friendly methods
+            has_get_rect = 'get_rect' in methods
+            
             # Use model's documentation or fallback to inference
             purpose = documented_components.get(name, self._infer_class_purpose(name, section_name))
+            usage_hints = self._extract_usage_hints(documented_components.get(name, ""))
             
             self.created_classes.append({
                 'name': name,
                 'key_methods': key_methods,
                 'purpose': purpose,
-                'section': section_name
+                'section': section_name,
+                'has_get_rect': has_get_rect,
+                'usage_hints': usage_hints
             })
         
         # Extract constants
@@ -549,7 +556,8 @@ Technical Specs: {tech_specs}
                     'name': name,
                     'type': const_type,
                     'purpose': purpose,
-                    'section': section_name
+                    'section': section_name,
+                    'value': value.strip()
                 })
     
     def _split_code_and_docs(self, response: str) -> tuple[str, str]:
@@ -642,12 +650,10 @@ Technical Specs: {tech_specs}
         """Infer class purpose from name and section context."""
         if 'player' in name.lower():
             return "main character control"
-        elif any(word in name.lower() for word in ['enemy', 'bullet', 'projectile']):
-            return "game object"
-        elif 'game' in name.lower():
+        elif any(word in name.lower() for word in ['game', 'state', 'manager']):
             return "game state management"
         else:
-            return f"entity from {section.lower()}"
+            return f"game entity from {section.lower()}"
     
     def _is_shareable_constant(self, name: str, value: str) -> bool:
         """Determine if a constant is likely to be used by other sections."""
@@ -680,6 +686,26 @@ Technical Specs: {tech_specs}
         else:
             return "game parameter"
     
+    def _extract_usage_hints(self, documentation: str) -> list[str]:
+        """Extract usage hints from component documentation."""
+        hints = []
+        if not documentation:
+            return hints
+            
+        # Look for common usage patterns in documentation
+        doc_lower = documentation.lower()
+        
+        if 'call' in doc_lower and 'before' in doc_lower:
+            hints.append("has_call_order_dependency")
+        if 'get_rect' in doc_lower or 'collision' in doc_lower:
+            hints.append("use_for_collision")
+        if 'update' in doc_lower and 'draw' in doc_lower:
+            hints.append("needs_update_then_draw")
+        if 'pygame.rect' in doc_lower:
+            hints.append("returns_pygame_rect")
+            
+        return hints
+    
     def _format_available_components(self) -> str:
         """Format tracked components for use in prompts, using model's detailed documentation."""
         if not (self.created_functions or self.created_classes or self.created_constants):
@@ -704,7 +730,17 @@ Technical Specs: {tech_specs}
                 
                 # Add method information
                 if cls['key_methods']:
-                    components.append(f"    Methods: {', '.join(cls['key_methods'])}")
+                    methods_str = ', '.join(cls['key_methods'])
+                    components.append(f"    Methods: {methods_str}")
+                    
+                    # Add collision detection hint
+                    if cls.get('has_get_rect', False):
+                        components.append(f"    COLLISION: Use {cls['name']}.get_rect() for pygame collision detection")
+                
+                # Add usage patterns from documentation
+                usage_hints = cls.get('usage_hints', [])
+                if 'needs_update_then_draw' in usage_hints:
+                    components.append(f"    PATTERN: Call {cls['name']}.update() before {cls['name']}.draw()")
                 
                 # Add usage patterns if available
                 for usage in usage_info:
@@ -728,6 +764,42 @@ Technical Specs: {tech_specs}
                     components.append(f"    {usage}")
         
         return "\n".join(components)
+    
+    def _generate_game_loop_guidance(self) -> str:
+        """Generate guidance for proper game loop structure based on tracked components."""
+        guidance = ["GAME LOOP STRUCTURE GUIDANCE:"]
+        
+        # Check what types of components we have
+        has_classes = bool(self.created_classes)
+        has_functions = bool(self.created_functions)
+        
+        if has_classes:
+            guidance.append("RECOMMENDED ORDER IN MAIN LOOP:")
+            guidance.append("1. Handle events (pygame.event.get())")
+            guidance.append("2. Update game logic:")
+            
+            for cls in self.created_classes:
+                if 'needs_update_then_draw' in cls.get('usage_hints', []):
+                    guidance.append(f"   - Call {cls['name']}.update() for each instance")
+            
+            guidance.append("3. Handle collisions (use .get_rect() methods)")
+            guidance.append("4. Draw everything:")
+            guidance.append("   - Clear screen first: screen.fill(BACKGROUND_COLOR)")
+            
+            for cls in self.created_classes:
+                guidance.append(f"   - Call {cls['name']}.draw(screen) for each instance")
+                
+            guidance.append("   - Update display: pygame.display.flip()")
+            guidance.append("5. Control frame rate: clock.tick(FPS)")
+        
+        if has_functions:
+            collision_funcs = [f for f in self.created_functions if 'collision' in f['purpose'].lower()]
+            if collision_funcs:
+                guidance.append("COLLISION HANDLING:")
+                for func in collision_funcs:
+                    guidance.append(f"   - Use {func['name']}() between update and draw phases")
+        
+        return "\n".join(guidance)
 
     def _extract_code_block(self, response: str) -> str:
         """Extract code from markdown code blocks."""

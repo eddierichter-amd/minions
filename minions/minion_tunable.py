@@ -24,6 +24,7 @@ from minions.prompts.minion_coding import (
 )
 
 from minions.minion_pygame import PygameMinion
+from minions.minion_tunable_swe import MiniSweMinion
 
 SENSITIVITY_LEVELS = {
     "uber": "Maximum cost savings: Run everything locally, prioritizing efficiency over quality",
@@ -31,7 +32,8 @@ SENSITIVITY_LEVELS = {
     "medium": "Balanced: Make per-turn decisions weighing cost vs quality",
     "low": "Low cost sensitivity: Prioritize quality, run everything remotely",
     "coding": "Balanced: Make per-turn decisions weighing cost vs quality specifically for coding",
-    "pygame": "Pygame-optimized: Remote decomposition + local implementation + template integration"
+    "pygame": "Pygame-optimized: Remote decomposition + local implementation + template integration",
+    "mini_swe_agent": "Mini-SWE-Agent optimized: Proper termination detection + bash command formatting"
 }
 
 class CostAwareMinion(Minion):
@@ -80,9 +82,20 @@ class CostAwareMinion(Minion):
         self.local_model_name = local_client.model_name
         self.remote_model_name = remote_client.model_name
         
-        # Initialize pygame minion if needed
+        # Initialize specialized minions if needed
         if cost_sensitivity == "pygame":
             self.pygame_minion = PygameMinion(
+                local_client=local_client,
+                remote_client=remote_client,
+                max_rounds=max_rounds,
+                callback=callback,
+                log_dir=log_dir,
+                mcp_client=mcp_client,
+                is_multi_turn=is_multi_turn,
+                max_history_turns=max_history_turns
+            )
+        elif cost_sensitivity == "mini_swe_agent":
+            self.mini_swe_minion = MiniSweMinion(
                 local_client=local_client,
                 remote_client=remote_client,
                 max_rounds=max_rounds,
@@ -170,6 +183,19 @@ class CostAwareMinion(Minion):
         # For pygame tasks, use specialized pygame approach
         elif self.cost_sensitivity == "pygame":
             return self.pygame_minion(
+                task=task,
+                context=context,
+                max_rounds=max_rounds,
+                doc_metadata=doc_metadata,
+                logging_id=logging_id,
+                is_privacy=is_privacy,
+                images=images,
+                is_follow_up=is_follow_up
+            )
+            
+        # For mini-swe-agent tasks, use specialized mini-swe approach
+        elif self.cost_sensitivity == "mini_swe_agent":
+            return self.mini_swe_minion(
                 task=task,
                 context=context,
                 max_rounds=max_rounds,
