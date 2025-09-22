@@ -73,7 +73,7 @@ class MiniSweMinion(Minion):
         }
     
 
-    def _decide_routing(self, message_history: List[Dict]) -> Tuple[str, Usage]:
+    def _decide_routing(self, message_history: List[Dict]) -> Tuple[str, Usage, str]:
         """
         Decide routing using two-phase approach optimized for mini-swe-agent:
         
@@ -89,7 +89,7 @@ class MiniSweMinion(Minion):
         This prevents waste of generating full bash commands before routing decision.
         
         Returns:
-            tuple[str, Usage]: (routing_decision, total_usage_for_routing)
+            tuple[str, Usage, str]: (routing_decision, total_usage_for_routing, extracted_thought)
         """
         print("🤔 Extracting THOUGHT portion from task using local model...")
         
@@ -103,21 +103,23 @@ class MiniSweMinion(Minion):
         # First, prompt local model to ONLY extract the thinking portion
         thinking_extraction_prompt = f"""You are working with mini-swe-agent. Your task is to ONLY analyze and provide the THOUGHT portion for this task. Do NOT provide any bash commands.
 
-        TASK: {task_histories}
+        Model tokens: {task_histories}
 
         System Prompt:
         {system_prompt}
 
         Instructions:
-        1. Analyze what needs to be done
-        2. Provide ONLY your reasoning and thinking process
+        1. Analyze what the exact next step is based on the task
+        2. Provide ONLY your reasoning and thinking process not the bash command or the entire script task
         3. Do NOT include any bash commands or code blocks
-        4. Focus on what step needs to be accomplished and why
+        4. Focus on what the exact next step needs to be accomplished and why
 
         Format your response as just the thinking portion:
-        THOUGHT: Your analysis of what needs to be done and why...
+        THOUGHT: Your analysis of what the exact next step to be done is and why...
 
-        Remember: NO bash commands, just the thinking process."""
+        Remember: 
+        1. NO bash commands, just the thinking process.
+        2. ONLY include the exact next step, not the thought process for the entire problem."""
 
         # Get thinking from local model
         thinking_messages = [{"role": "user", "content": thinking_extraction_prompt}]
@@ -125,7 +127,7 @@ class MiniSweMinion(Minion):
         total_routing_usage += thinking_usage  # Track thinking extraction usage
         extracted_thought = thinking_response[0]
         
-        print(f"💭 Extracted THOUGHT: {extracted_thought[:150]}...")
+        print(f"💭 Extracted THOUGHT: {extracted_thought}...")
         print(f"💰 Thinking extraction usage: {thinking_usage}")
         
         # Now use the extracted thought for routing decision (similar to _decide_model_for_turn)
@@ -164,7 +166,7 @@ class MiniSweMinion(Minion):
                 self.performance_metrics["remote_attempts"] += 1
                 self.performance_metrics["escalations"] += 1
                 
-            return routing_decision, total_routing_usage
+            return routing_decision, total_routing_usage, extracted_thought
             
         except (json.JSONDecodeError, KeyError) as e:
             print(f"⚠️ Error parsing routing decision: {e}")
@@ -177,20 +179,48 @@ class MiniSweMinion(Minion):
             
             # Fallback: if task contains completion signals, go local; otherwise remote
             print("🔄 Fallback: Complex task, routing to REMOTE") 
-            return "remote", total_routing_usage
+            return "remote", total_routing_usage, extracted_thought
 
-    def _run_local_direct(self, message_history: List[Dict]):
+    def _run_local_direct(self, message_history: List[Dict], extracted_thinking: str = None):
         """
         Run simple tasks directly on local model without remote supervision.
         Optimized for efficiency and cost reduction.
+        
+        Args:
+            message_history: The conversation messages
+            extracted_thinking: The thinking/analysis extracted during routing decision
         """
         print("🏃 Running LOCAL DIRECT (no remote supervision needed)")
         
         start_time = time.time()
         local_usage = Usage()  
 
-        # Get response from local model
-        response, usage, _ = self.local_client.chat(message_history)
+        # Prepare messages with extracted thinking if available
+        if extracted_thinking:
+            print(f"💭 Using extracted thinking from routing: {extracted_thinking[:100]}...")
+            # Add the extracted thinking as context to help maintain consistency
+            enhanced_messages = message_history.copy()
+            # Insert the thinking as a system-style guidance before the last user message
+            thinking_context = f"\n\nPrevious analysis of this task:\n{extracted_thinking}\n\nNow complete the task based on this analysis:"
+            
+            if enhanced_messages and enhanced_messages[-1]["role"] == "user":
+                # Handle different content formats (string vs list)
+                current_content = enhanced_messages[-1]["content"]
+                if isinstance(current_content, list):
+                    # Anthropic-style content blocks - add to the last text block
+                    for block in current_content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            block["text"] += thinking_context
+                            break
+                else:
+                    # String content - just append
+                    enhanced_messages[-1]["content"] += thinking_context
+            
+            response, usage, _ = self.local_client.chat(enhanced_messages)
+        else:
+            # Fallback to original behavior
+            response, usage, _ = self.local_client.chat(message_history)
+        
         local_usage += usage
         
         final_answer = response[0]
@@ -239,17 +269,41 @@ class MiniSweMinion(Minion):
             }
         }
 
-    def _run_remote_direct(self, message_history: List[Dict]):
+    def _run_remote_direct(self, message_history: List[Dict], extracted_thinking: str = None):
         """
         Run simple tasks directly on remote model without loops or back-and-forth.
         Works like _run_local_direct but uses remote model - no iterative supervisor-worker protocol.
         Optimized for complex tasks that need remote model capability.
+        
+        Args:
+            message_history: The conversation messages
+            extracted_thinking: The thinking/analysis extracted during routing decision
         """
         print("🏃 Running REMOTE DIRECT (no loops, just direct remote execution)")
         
         start_time = time.time()
         local_usage = Usage()
         remote_usage = Usage()
+        
+        # Prepare messages with extracted thinking if available
+        enhanced_message_history = message_history.copy()
+        if extracted_thinking:
+            print(f"💭 Using extracted thinking from routing: {extracted_thinking[:100]}...")
+            # Add the extracted thinking as context to help maintain consistency
+            thinking_context = f"\n\nPrevious analysis of this task:\n{extracted_thinking}\n\nNow complete the task based on this analysis:"
+            
+            if enhanced_message_history and enhanced_message_history[-1]["role"] == "user":
+                # Handle different content formats (string vs list)
+                current_content = enhanced_message_history[-1]["content"]
+                if isinstance(current_content, list):
+                    # Anthropic-style content blocks - add to the last text block
+                    for block in current_content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            block["text"] += thinking_context
+                            break
+                else:
+                    # String content - just append
+                    enhanced_message_history[-1]["content"] += thinking_context
         
         # Prepare messages - handle Anthropic vs OpenAI format differences
         # Anthropic clients need system messages as separate parameter, not in messages array
@@ -264,9 +318,9 @@ class MiniSweMinion(Minion):
                 messages[0]["content"] = user_content"""
             
             # Get response from remote model with system parameter
-            system_prompt = message_history[0]["content"]
+            system_prompt = enhanced_message_history[0]["content"]
 
-            task_histories = message_history[1:]
+            task_histories = enhanced_message_history[1:]
             remote_start_time = time.time()
             response, usage = self.remote_client.chat(task_histories, system=system_prompt)
         else:
@@ -274,7 +328,7 @@ class MiniSweMinion(Minion):
             
             # Get response from remote model
             remote_start_time = time.time()
-            response, usage = self.remote_client.chat(message_history)
+            response, usage = self.remote_client.chat(enhanced_message_history)
         timing = {
             "local_call_time": 0,
             "remote_call_time": time.time() - remote_start_time,
@@ -341,12 +395,12 @@ class MiniSweMinion(Minion):
         print(f"\n========== MINI-SWE-AGENT MINION STARTED ==========")
         
         # Smart routing decision
-        routing_decision, initial_routing_usage = self._decide_routing(message_history)
+        routing_decision, initial_routing_usage, extracted_thinking = self._decide_routing(message_history)
 
         if routing_decision == "local":
             # Only truly trivial commands go direct to local - no supervision needed
             print("🚀 Using LOCAL DIRECT execution (trivial command, no supervision)")
-            result = self._run_local_direct(message_history)
+            result = self._run_local_direct(message_history, extracted_thinking)
 
             # Add initial routing usage to local usage
             result["local_usage"] += initial_routing_usage
@@ -363,7 +417,7 @@ class MiniSweMinion(Minion):
         else:
             # All other tasks use remote direct execution (no loops)
             print("🤝 Using REMOTE DIRECT execution (complex task, no loops)")
-            result = self._run_remote_direct(message_history)
+            result = self._run_remote_direct(message_history, extracted_thinking)
 
             # Add initial routing usage to local usage (routing uses local model)
             result["local_usage"] += initial_routing_usage
