@@ -168,13 +168,15 @@ Mini-SWE-Agent tasks have specific characteristics:
 - They may be termination requests (ending with COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT)
 - They involve software engineering tasks in a controlled environment
 
-When making your decision, focus on:
+When making your decision, focus on the specific needs of coding assistance:
 
-1. **Termination Detection**: Is this asking to end the task? If so, this is simple and can go local.
-2. **Command Complexity**: Simple commands (echo, cat, ls) vs complex operations (git, compilation, multi-step)
-3. **Context Understanding**: Does it require deep understanding of project structure or codebase?
-4. **Error Risk**: Risk of generating incorrect bash commands that could break the environment
-5. **Multi-step Reasoning**: Need to plan sequences of actions or understand dependencies
+1. Complexity of the coding task (size of codebase, multi-file or multi-language interactions, algorithmic difficulty).
+2. Reasoning depth required for debugging or architecture design.
+3. Familiarity with domain-specific libraries, frameworks, or APIs.
+4. Risk of producing incorrect code or subtle logical errors.
+5. Requirement for correctness in multi-step reasoning (e.g., algorithm analysis, big-O tradeoffs, state management).
+6. Need for up-to-date ecosystem knowledge (latest language features, evolving libraries, or tooling changes).
+7. Potential for extended computation (e.g., generating and reasoning over long code snippets, refactoring across files).
 
 Current task: {task}
 Previous context length: {context_length} characters
@@ -186,18 +188,21 @@ SPECIAL CONSIDERATION: If the task contains "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTP
 
 Rate each factor on a scale of 1-5 and provide your final routing decision.
 
+Rate each factor on a scale of 1-5 and provide your final routing decision.
+
 Output your analysis in the following JSON format:
 {{
     "complexity_analysis": {{
-        "termination_request": <1-5>,
-        "command_complexity": <1-5>, 
-        "context_understanding": <1-5>,
+        "code_complexity": <1-5>,
+        "reasoning_depth": <1-5>,
+        "library_framework_knowledge": <1-5>,
         "error_risk": <1-5>,
-        "multi_step_reasoning": <1-5>
+        "knowledge_recency": <1-5>,
+        "computation_steps": <1-5>
     }},
     "average_complexity": <float>,
     "routing_decision": <"remote" or "local">,
     "explanation": <string explaining the decision>
 }}
 
-IMPORTANT: Route termination requests and simple commands to LOCAL. Only use REMOTE for complex software engineering tasks requiring deep reasoning."""
+IMPORTANT: Be conservative with remote routing—only assign to remote ({remote_model_name}) if the coding task truly requires advanced reasoning, domain knowledge, or ecosystem recency that the local model cannot reliably handle."""

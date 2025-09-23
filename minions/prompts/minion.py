@@ -218,7 +218,7 @@ Current conversation round: {round_num} out of {max_rounds}
 Previous context length: {context_length} characters
 Description of the context: {doc_metadata}
 
-Rate each factor on a scale of 1–5 and provide your final routing decision.
+Rate each factor on a scale of 1-5 and provide your final routing decision.
 
 Output your analysis in the following JSON format:
 {{
